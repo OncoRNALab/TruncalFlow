@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+
+#PBS -l nodes=1:ppn=2
+#PBS -l walltime=1:00:00
+#PBS -l mem=20gb
+#PBS -o stdout.$PBS_JOBID
+#PBS -e stderr.$PBS_JOBID
+
+module load Python/3.12.3-GCCcore-13.3.0
+
+for ID in P1 P2 P3 P4 P5 P6 P7 P8 P9 P10 P11 P12 P13 P14 P15 P16 P17 P18 P19 P20 P21 P22 P23 P24 P25 S2 S3 S4 S5 S6 S7 S8 S9 S10 T0 T1 T2 T3 T4 T5 T6 T7 T8 T9 T10 T11 T12 T13 T14 T15 T16
+do
+    
+    cd /path/to/groundtruth/files/$ID-noXY
+    python /path/to/sciclonefolder/LOH.py
+    
+    cd /path/to/sciclonefolder/sample$ID
+    
+    cd ..
+
+done
