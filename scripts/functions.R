@@ -1,3 +1,5 @@
+#these functions are part of QuantumClone R package, developed by Deveau P. et al.: https://github.com/DeveauP/QuantumClone
+
 From_freq_to_cell<-function(SNV_list,FREEC_list=NULL,Sample_names,Genotype_provided=FALSE,save_plot=TRUE,
                             contamination,ncores = 4, restrict.to.AB = FALSE,output_directory=NULL,
                             force.single.copy = FALSE){
