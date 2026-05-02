@@ -1,7 +1,7 @@
 # **TruncalFlow - Pipeline for truncal mutation identification** 
 
 ## **Overview**
-TruncalFlow is a high-throughput command-line tool for identifying truncal mutations from tumor sequencing data. Built around the [QuantumClone](https://pmc.ncbi.nlm.nih.gov/articles/PMC5972665/) R package for clonal reconstruction, it streamlines preprocessing, formatting, clustering, and postprocessing steps into a single automated pipeline optimized for use on HPC environments.
+TruncalFlow is a high-throughput command-line tool for identifying truncal mutations from tumor sequencing data. Built around the [QuantumClone](https://pmc.ncbi.nlm.nih.gov/articles/PMC5972665/) R package for clonal reconstruction, it streamlines preprocessing, formatting, clustering, and postprocessing steps into a single automated pipeline. TruncalFlow supports both local execution and HPC execution through a PBS scheduler.
 This tool was used in the analysis presented in the paper [Integrative benchmarking and automation of clonal reconstruction of somatic mutations in single-sample tumor genome analysis].
 
 <p align="center">
@@ -40,7 +40,7 @@ cd TruncalFlow/scripts
 
 ### **Dependencies**
 
-TruncalFlow runs inside a containerized R environment built with Singularity (Apptainer). To install dependencies:
+TruncalFlow runs inside a containerized R environment built with Singularity/Apptainer. Both local and PBS execution modes require Singularity or Apptainer to be installed. To install dependencies:
 
 ```
 singularity pull docker://stevelefever/thesis_2025_marina
@@ -52,17 +52,47 @@ The resulting .sif file (thesis_2025_marina_latest.sif) should be placed in the 
 
 ## **Running Instructions**
 
-This tool must be run on an HPC system with PBS job scheduler support.
+TruncalFlow can be run either locally or on an HPC system with PBS job scheduler support.
 
-Basic usage:
+- `--executor local` (default): runs QuantumClone directly through the container without PBS.
+- `--executor pbs`: submits one clustering job per sample through `qsub`.
 
-```
+### Basic local usage
+
+```bash
 python3 main.py \
   --vcf /path/to/vcf(s)/ \
   --output_dir /path/to/output/
 ```
 
-Full example with CNV and optional arguments:
+### Example local run with custom resources
+
+```bash
+python3 main.py \
+  --vcf ./vcf_dir/ \
+  --cnv ./cnv_dir/ \
+  --cnv_format battenberg \
+  --output_dir ./results/ \
+  --executor local \
+  --cpus 4 \
+  --mem 16G
+```
+
+### Example PBS run
+
+```bash
+python3 main.py \
+  --vcf ./vcf_dir/ \
+  --cnv ./cnv_dir/ \
+  --cnv_format battenberg \
+  --output_dir ./results/ \
+  --executor pbs \
+  --cpus 12 \
+  --mem 200G \
+  --time 03:00:00
+```
+
+### Full example with CNV and optional arguments:
 
 ```
 python3 main.py \
@@ -96,6 +126,9 @@ The pipeline executor main_wrapper.py takes the following options:
 | `--filtering_mode`   | ❌                  | Combine mutation_types and functional_filter using `both` (both must match) or `single` (default)  |
 | `--key_mutations`    | ❌                  | Path to a file listing important mutation IDs to retain regardless of filters (e.g., `key_mutations.txt` |
 | `--time`             | ❌                  | Walltime for clustering jobs (default: `10:00:00`), increase if a clustering job failed due to runtime issue  |
+| `--executor`         | ❌                  | Execution mode: `local` (default, direct container execution) or `pbs` (submit jobs with `qsub`) |
+| `--cpus`             | ❌                  | Number of CPU cores to request. Default: `4`. Used as `--cpus` in local mode and `ppn` in PBS mode |
+| `--mem`              | ❌                  | Memory limit. Default: `16G`. Used as `--memory` in local mode and `mem` in PBS mode |
 
 ---
 
@@ -133,4 +166,6 @@ The file `truncalmutations.txt` includes a table of mutations assigned to the tr
 
 ## **Notes**
 
-If you wish to re-run the clustering step for certain samples, where clustering was finished, you'll need to delete the clustering results for this sample first. This is done to protect against overwriting the results in case multiple samples (in one folder) are used. 
+- If you wish to re-run the clustering step for certain samples, where clustering was finished, you'll need to delete the clustering results for this sample first. This is done to protect against overwriting the results in case multiple samples (in one folder) are used. 
+
+- In local mode, samples are processed sequentially. In PBS mode, one clustering job is submitted per sample, and postprocessing starts as each sample completes.
