@@ -4,6 +4,7 @@ import argparse
 import time
 import subprocess
 import sys
+import traceback
 
 from preprocessing import process_sample, extract_sample_id
 from run_clustering import submit_clustering_jobs, check_clustering_errors
@@ -12,7 +13,7 @@ from results_processing import process_quantumclone_results
 def wait_and_postprocess(output_dir, vcf_input, postprocess_fn, timeout_hours=10, poll_interval=60):
     """
     Waits for clustering outputs and starts postprocessing as soon as each sample finishes.
-
+    Checks errors via check_clustering_errors before starting postprocessing.
     Args:
         output_dir (str): Base output directory.
         vcf_input (str): VCF input path (file or folder) for process_quantumclone_results().
@@ -20,11 +21,12 @@ def wait_and_postprocess(output_dir, vcf_input, postprocess_fn, timeout_hours=10
         timeout_hours (int): Max time to wait before raising TimeoutError.
         poll_interval (int): Seconds to wait between checks.
     """
-    
+    from run_clustering import check_clustering_errors
+
     sample_dirs = [d for d in os.listdir(output_dir) if os.path.isdir(os.path.join(output_dir, d))]
     completed_samples = set()
     errored_samples = set()
-    #expected_files = [os.path.join(output_dir, s, "clustering.csv") for s in sample_dirs]
+    failed_via_check = set(check_clustering_errors(output_dir))
     start_time = time.time()
 
     while True:
@@ -32,10 +34,15 @@ def wait_and_postprocess(output_dir, vcf_input, postprocess_fn, timeout_hours=10
             sample_path = os.path.join(output_dir, sample)
             cluster_file = os.path.join(sample_path, "clustering.csv")
             err_file = os.path.join(sample_path, "pbs_jobs", f"RunClustering_{sample}.err")
-    
+
             if sample in completed_samples or sample in errored_samples:
                 continue
-    
+
+            if sample in failed_via_check:
+                errored_samples.add(sample)
+                print(f"[ERROR] Skipping postprocessing for {sample} (previously flagged as failed).")
+                continue
+
             if os.path.exists(cluster_file):
                 print(f"[INFO] Clustering complete for {sample}. Starting postprocessing...")
                 try:
@@ -51,16 +58,16 @@ def wait_and_postprocess(output_dir, vcf_input, postprocess_fn, timeout_hours=10
                     if "OOM" in content or "Killed" in content or "error" in content.lower():
                         print(f"[ERROR] Clustering job failed for {sample}. Error:\n{content}")
                         errored_samples.add(sample)
-    
+
         print(f"[INFO] Waiting for clustering... {len(completed_samples)}/{len(sample_dirs)} done.")
-    
+
         if len(completed_samples) + len(errored_samples) == len(sample_dirs):
             break
-    
+
         if time.time() - start_time > timeout_hours * 3600:
             print("[ERROR] Timeout exceeded while waiting for clustering jobs.")
             break
-    
+
         time.sleep(poll_interval)
 
     if len(completed_samples) == 0:
@@ -75,6 +82,12 @@ def main():
     parser.add_argument('--cnv', required=False, help='Optional CNV file or folder')
     parser.add_argument('--cnv_format', required=False, choices=['battenberg', 'major_minor_format'])
     parser.add_argument('--output_dir', required=True)
+    parser.add_argument('--executor', choices=['local', 'pbs'], default='local', 
+                       help='Execution mode: local (default, direct container exec) or pbs (HPC scheduler)')
+    parser.add_argument('--cpus', type=int, default=4, 
+                       help='Number of CPU cores (default: 4). For PBS: ppn value; for local: Singularity --cpus')
+    parser.add_argument('--mem', type=str, default='16G', 
+                       help='Memory limit (default: 16G). For PBS: mem value; for local: Singularity --memory')
     #parser.add_argument('--vcf_root_dir', required=False, help='Directory where original VCFs are stored (for result annotation)')
     parser.add_argument('--mutation_types', nargs='+', choices=['snv', 'indel'], help='Filter for mutation types: snv, indel')
     parser.add_argument('--functional_filter', nargs='+', choices=['protein_coding', 'missense', 'nonsense', 'transcript_ablation',
@@ -139,16 +152,32 @@ def main():
     job_ids = []
     # === STEP 2: Submit Clustering Jobs ===
     try:
-        job_ids = submit_clustering_jobs(args.output_dir, args.time)
+        job_ids = submit_clustering_jobs(args.output_dir, args.time, args.executor, args.cpus, args.mem)
         
-        # === STEP 3: Wait for Clustering Completion ===
-        wait_and_postprocess(
-            args.output_dir,
-            args.vcf,
-            postprocess_fn=process_quantumclone_results,
-            timeout_hours=10
-        )
-    
+        if args.executor == 'local':
+            sample_dirs = [d for d in os.listdir(args.output_dir) if os.path.isdir(os.path.join(args.output_dir, d))]
+            failed_samples = set(check_clustering_errors(args.output_dir))
+            successful = 0
+
+            for sample in sample_dirs:
+                if sample in failed_samples:
+                    continue
+                cluster_file = os.path.join(args.output_dir, sample, "clustering.csv")
+                if os.path.exists(cluster_file):
+                    print(f"[INFO] Postprocessing results for {sample}")
+                    process_quantumclone_results(args.output_dir, args.vcf, sample)
+                    successful += 1
+
+            if successful == 0:
+                raise RuntimeError("[ERROR] No successful clustering jobs.")
+        else:
+            # === STEP 3: Wait for Clustering Completion ===
+            wait_and_postprocess(
+                args.output_dir,
+                args.vcf,
+                postprocess_fn=process_quantumclone_results,
+                timeout_hours=10
+            )
         # === STEP 4: Process Results ===
         #sample_dirs = [d for d in os.listdir(args.output_dir) if os.path.isdir(os.path.join(args.output_dir, d))]
         #successful_samples = [s for s in sample_dirs if s not in failed_samples]
