@@ -152,8 +152,8 @@ def limit_mutations(vcf_df, max_mutations=65536, key_mutations_path=None):
 
     #return final_df
     
-    if keep_mutations_path:
-        keep_df = pd.read_csv(keep_mutations_path, sep=None, engine='python')
+    if key_mutations_path:
+        keep_df = pd.read_csv(key_mutations_path, sep=None, engine='python')
         keep_df.columns = [c.strip().upper() for c in keep_df.columns]
         keep_df.rename(columns={'CHROM': '#CHROM'}, inplace=True)
 
@@ -170,7 +170,7 @@ def limit_mutations(vcf_df, max_mutations=65536, key_mutations_path=None):
         print("[WARN] Number of priority mutations exceeds max limit, returning only those.")
         return merged.iloc[:max_mutations]
 
-    # Continue with chrom-balanced sampling for the rest
+    #continue with chrom-balanced sampling for the rest
     chrom_counts = vcf_df['#CHROM'].value_counts(normalize=True)
     sampled = []
 
@@ -208,14 +208,14 @@ def process_sample(vcf_path, cnv_path, sample_id, cnv_format, output_dir, mutati
     default_genotype = cnv_path is None
     snvs = preprocess_vcf(vcf, sample_id, default_genotype=default_genotype)
 
-    # === OUTPUT ===
+    #OUTPUT
     sample_output_dir = os.path.join(output_dir, sample_id)
     os.makedirs(sample_output_dir, exist_ok=True)
 
     if snvs is not None:
         snvs.to_csv(os.path.join(sample_output_dir, f"{sample_id}_SNVlist.txt"), sep='\t', index=False)
 
-    # === CNV PROCESSING ===
+    #CNV PROCESSING
     if cnv_path:
         if cnv_format == 'battenberg':
             freec = convert_battenberg_to_freec(cnv_path)
