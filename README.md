@@ -52,7 +52,7 @@ The resulting .sif file (thesis_2025_marina_latest.sif) should be placed in the 
 
 ## **Running Instructions**
 
-TruncalFlow can be run either locally or on an HPC system with PBS job scheduler support.
+TruncalFlow can be run either locally on a Linux-based system or on an HPC system with PBS job scheduler support.
 
 - `--executor local` (default): runs QuantumClone directly through the container without PBS.
 - `--executor pbs`: submits one clustering job per sample through `qsub`.
